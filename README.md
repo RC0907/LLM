@@ -22,3 +22,5 @@ Streamlit: A framework for building interactive web apps.
 PyPDF2: A library for reading and extracting text from PDF files.
 Transformers: A library by Hugging Face for working with machine learning models, specifically used here for text summarization.
 Pre-trained Model: The app uses the facebook/bart-base model for generating summaries.
+
+Deployed  Link : https://summarization0967.streamlit.app
