@@ -1,16 +1,21 @@
 import streamlit as st
-from transformers import BartTokenizer, BartForConditionalGeneration
+from transformers import BartTokenizerFast, BartForConditionalGeneration
 import PyPDF2
 import io
 import logging
+import torch
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Use the smaller model
-model_name = "facebook/bart-base"
-tokenizer = BartTokenizer.from_pretrained(model_name)
+# Use the more optimized model
+model_name = "facebook/bart-large-cnn"
+tokenizer = BartTokenizerFast.from_pretrained(model_name)
 model = BartForConditionalGeneration.from_pretrained(model_name)
+
+# Move the model to GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
 def extract_text_from_pdf(file):
     try:
@@ -24,14 +29,11 @@ def extract_text_from_pdf(file):
         return None
 
 def summarize_text(text):
-    try:
-        inputs = tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=1024, truncation=True)
-        summary_ids = model.generate(inputs, max_length=500, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
-        summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-        return summary
-    except Exception as e:
-        logging.error(f"Error generating summary: {e}")
-        return "An error occurred while generating the summary."
+    inputs = tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=1024, truncation=True)
+    inputs = inputs.to(device)
+    summary_ids = model.generate(inputs, max_length=500, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
+    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    return summary
 
 def main():
     st.title("Research Paper Summarization App")
