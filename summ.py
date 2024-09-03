@@ -1,6 +1,5 @@
 import streamlit as st
 import base64
-import os
 from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader
@@ -23,11 +22,9 @@ DATA_DIR.mkdir(exist_ok=True)
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
-
     # Check if GPU is available and move model to GPU if possible
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    
     return tokenizer, model, device
 
 # File preprocessing
@@ -43,24 +40,31 @@ def summarize_text(text, tokenizer, model, device, max_length=100):
     inputs = tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=250, truncation=True).to(device)
     summary_ids = model.generate(
         inputs,
-        max_length=max_length,  # Reduced from 150 to 100
-        min_length=30,  # Adjust if needed
-        length_penalty=3.0,  # Increased from 2.0 to 3.0 for shorter summaries
+        max_length=max_length,
+        min_length=30,
+        length_penalty=3.0,
         num_beams=4,
         early_stopping=True
     )
     summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
     return summary
 
-# LLM pipeline
-@st.cache_data(show_spinner=False)
-def llm_pipeline(filepath, _tokenizer, _model, _device):  # Note the leading underscores
+# Function to limit the summary to a specific word count
+def truncate_summary(summary, word_limit=500):
+    words = summary.split()
+    if len(words) > word_limit:
+        summary = " ".join(words[:word_limit]) + "..."
+    return summary
+
+# LLM pipeline without caching
+def llm_pipeline(filepath, tokenizer, model, device):
     texts = file_preprocessing(filepath)
     summaries = []
     for text in tqdm(texts, desc="Summarizing chunks"):
-        summary = summarize_text(text, _tokenizer, _model, _device)
+        summary = summarize_text(text, tokenizer, model, device)
         summaries.append(summary)
-    return " ".join(summaries)
+    full_summary = " ".join(summaries)
+    return truncate_summary(full_summary, word_limit=500)
 
 # Function to display the PDF
 @st.cache_data
@@ -73,10 +77,8 @@ def displayPDF(file):
 # Main function
 def main():
     st.title("Document Summarization App")
-
     # Load model
     tokenizer, model, device = load_model()
-
     uploaded_file = st.file_uploader("Upload your PDF file", type=['pdf'])
     
     if uploaded_file is not None:
@@ -84,11 +86,9 @@ def main():
             # Create a safe filename
             safe_filename = "".join([c for c in uploaded_file.name if c.isalpha() or c.isdigit() or c==' ']).rstrip()
             filepath = DATA_DIR / safe_filename
-
             # Save uploaded file
             with open(filepath, "wb") as temp_file:
                 temp_file.write(uploaded_file.getbuffer())
-
             col1, col2 = st.columns(2)
             
             with col1:
